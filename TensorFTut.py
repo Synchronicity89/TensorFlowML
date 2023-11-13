@@ -3,27 +3,28 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 
-class SinusoidalLayer(tf.keras.layers.Layer):
-    def __init__(self, units=32, **kwargs):
-        super(SinusoidalLayer, self).__init__(**kwargs)
-        self.units = units
-    
+class DiscontinuityLayer(tf.keras.layers.Layer):
+    def __init__(self, **kwargs):
+        super(DiscontinuityLayer, self).__init__(**kwargs)
+
     def build(self, input_shape):
-        self.frequency = self.add_weight(
-            name='frequency',
-            shape=(input_shape[-1], self.units),
-            initializer='random_normal',
+        self.discontinuity_point = self.add_weight(
+            name='discontinuity_point',
+            shape=(1,),
+            initializer=tf.keras.initializers.Constant(value=4.0),  # Initial value set near the expected discontinuity
             trainable=True)
-    
+
     def call(self, inputs):
         inputs = tf.cast(inputs, tf.float32)
-        frequency = tf.cast(self.frequency, tf.float32)
-        return tf.sin(tf.matmul(inputs, frequency * 4))
-    
+        discontinuity_point = tf.cast(self.discontinuity_point, tf.float32)
+        below = tf.sin(5.0 * inputs) * tf.cast(inputs < discontinuity_point, tf.float32)
+        above = tf.sin(8.0 * inputs) * tf.cast(inputs >= discontinuity_point, tf.float32)
+        return below + above
+
     def get_config(self):
         config = super().get_config()
-        config.update({'units': self.units})
         return config
+
 
 def eq_1(x):
     return np.sin(5 * x) + np.sin(5 * x) + 0.1 * x ** 2
@@ -50,14 +51,12 @@ def train():
     train_dataset = train_dataset.cache().shuffle(buffer_size=10000).batch(1024*4).prefetch(tf.data.AUTOTUNE)
 
     model = tf.keras.Sequential([
-        SinusoidalLayer(20, input_shape=(1,)),
-        tf.keras.layers.Dense(20, activation='relu'),
-        tf.keras.layers.Dense(40, activation='relu'),
-        tf.keras.layers.Dense(60, activation='relu'),
-        tf.keras.layers.Dense(40, activation='relu'),
-        tf.keras.layers.Dense(20, activation='relu'),
-        tf.keras.layers.Dense(1)
-    ])
+            DiscontinuityLayer(input_shape=(1,)),  # Use the custom DiscontinuityLayer
+            tf.keras.layers.Dense(20, activation='relu'),
+            tf.keras.layers.Dense(40, activation='relu'),
+            tf.keras.layers.Dense(20, activation='relu'),
+            tf.keras.layers.Dense(1)
+        ])
 
 
     model.compile(optimizer='adam', loss='mean_squared_error')
@@ -72,7 +71,7 @@ def train():
 if __name__ == '__main__':
     train()  # Uncomment to train the model
 
-    new_model = tf.keras.models.load_model('my_model.h5', custom_objects={'SinusoidalLayer': SinusoidalLayer})
+    new_model = tf.keras.models.load_model('my_model.h5', custom_objects={'DiscontinuityLayer': DiscontinuityLayer})
                                            
     # Generate test data from -15 to 15
     x_test = np.linspace(-15, 15, 300).reshape(-1, 1)
@@ -90,32 +89,24 @@ if __name__ == '__main__':
     plt.show()
 
 
-# ... (existing code)
+    # After training
+    discontinuity_layer = new_model.layers[0]  # Assuming the DiscontinuityLayer is the first layer
+    discontinuity_point = discontinuity_layer.get_weights()[0]  # Retrieve the discontinuity point weight
 
-# After training
-sinusoidal_layer = new_model.layers[0]  # Assuming the SinusoidalLayer is the first layer
-frequency_weights = sinusoidal_layer.get_weights()[0]  # Retrieve the frequency weights
+    # Report the discontinuity point weight
+    print("Discontinuity Point Weight:")
+    print(discontinuity_point)
 
-# Report the frequency weights
-print("Frequency Weights:")
-print(frequency_weights)
+    # Visualize the Discontinuity Layer Activation
+    test_inputs = np.linspace(-15, 15, 300).reshape(-1, 1)
+    discontinuity_activation = discontinuity_layer(test_inputs)
 
-# Visualize the frequency weights as a histogram
-plt.figure(figsize=(10, 6))
-plt.hist(frequency_weights.flatten(), bins=50, alpha=0.75)
-plt.title('Histogram of Frequency Weights')
-plt.xlabel('Frequency Value')
-plt.ylabel('Count')
-plt.show()
-
-# Test the Sinusoidal Layer Activation
-test_inputs = np.linspace(-2*np.pi, 2*np.pi, 100).reshape(-1, 1)  # Inputs over two periods
-sinusoidal_activation = sinusoidal_layer(test_inputs)  # Pass inputs through the SinusoidalLayer
-
-# Plot the activation pattern
-plt.figure(figsize=(10, 6))
-plt.plot(test_inputs, sinusoidal_activation)
-plt.title('Sinusoidal Layer Activation Pattern')
-plt.xlabel('Input Value')
-plt.ylabel('Layer Activation')
-plt.show()
+    # Plot the activation pattern
+    plt.figure(figsize=(10, 6))
+    plt.plot(test_inputs, discontinuity_activation)
+    plt.title('Discontinuity Layer Activation Pattern')
+    plt.xlabel('Input Value')
+    plt.ylabel('Layer Activation')
+    plt.axvline(x=discontinuity_point, color='grey', linestyle='--', label=f'Discontinuity Point ~ {discontinuity_point[0]:.2f}')
+    plt.legend()
+    plt.show()
