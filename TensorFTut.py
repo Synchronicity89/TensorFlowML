@@ -6,11 +6,11 @@ import matplotlib.pyplot as plt
 # Constants
 SIZE = 200000
 RANGE_X = (-10, 10)
-FOCUS_RANGE = (3.6, 4.4)
+FOCUS_RANGE = (2.8, 5.2)
 FOCUS_SIZE = 100000
 NOISE_LEVEL = 0.1
 FREQUENCY_COUNT = 1024
-BATCH_SIZE = 1024 * 1
+BATCH_SIZE = 1024 * 4
 EPOCHS = 10
 FOURIER_SCALE = 10
 DISCONTINUITY_INIT = 4.0  # Initial guess for the discontinuity point
